@@ -11,12 +11,48 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"bufio"
 )
 
-// === KNOWN MALWARE HASHES ===
-var malwareHashes = map[string]string{
-	"eicar_test_file": "44d88612fea8a8f36de82e1278abb02f",
+var malwareHashes = map[string]bool{}
+
+func loadHashesFromDir(dir string) error {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range files {
+		if strings.HasSuffix(strings.ToLower(f.Name()), ".md5") {
+			fullPath := filepath.Join(dir, f.Name())
+			fmt.Println("🔍 Loading hashes from:", fullPath)
+			err := loadHashesFromFile(fullPath)
+			if err != nil {
+				fmt.Printf("⚠️ Failed to load %s: %v\n", fullPath, err)
+			}
+		}
+	}
+	return nil
 }
+
+func loadHashesFromFile(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 32 {
+			malwareHashes[line] = true
+		}
+	}
+
+	return scanner.Err()
+}
+
 
 func computeMD5(filePath string) (string, error) {
 	file, err := os.Open(filePath)
@@ -38,14 +74,13 @@ func scanFile(filePath string) {
 		fmt.Printf("[!] Could not hash %s: %v\n", filePath, err)
 		return
 	}
-	for name, knownHash := range malwareHashes {
-		if md5hash == knownHash {
-			fmt.Printf("[⚠️] Malware found: %s (%s)\n", filePath, name)
-			return
-		}
+	if malwareHashes[md5hash] {
+		fmt.Printf("[⚠️] Malware found: %s\n", filePath)
+	} else {
+		fmt.Printf("[OK] Clean: %s\n", filePath)
 	}
-	fmt.Printf("[OK] Clean: %s\n", filePath)
 }
+
 
 func extractZip(zipPath string) (string, error) {
 	r, err := zip.OpenReader(zipPath)
@@ -129,8 +164,18 @@ func main() {
 	fmt.Println("🛡️  Malware Scanner (MD5 + ZIP support)")
 	fmt.Printf("📂 Scanning: %s\n\n", *dirPtr)
 
+	// 🔥 Load all .md5 hash files before scanning
+	err := loadHashesFromDir("virus_md5_hashes")
+	if err != nil {
+		fmt.Printf("❌ Failed to load hash directory: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Total hashes loaded: %d\n", len(malwareHashes))
+
 	scanDirectory(*dirPtr)
 
+	
 	fmt.Println("\nPress Enter to exit...")
 	fmt.Scanln()
 }
