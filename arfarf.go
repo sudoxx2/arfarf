@@ -130,4 +130,7 @@ func main() {
 	fmt.Printf("📂 Scanning: %s\n\n", *dirPtr)
 
 	scanDirectory(*dirPtr)
+
+	fmt.Println("\nPress Enter to exit...")
+	fmt.Scanln()
 }
