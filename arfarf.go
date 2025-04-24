@@ -1,21 +1,23 @@
 package main
 
 import (
-	"archive/zip"
-	"crypto/md5"
-	"encoding/hex"
-	"flag"
-	"fmt"
+	"archive/zip"     // for handling zip file extraction
+	"crypto/md5"       // for computing file hashes
+	"encoding/hex"     // for converting hash bytes to hex strings
+	"flag"             // for command-line argument parsing
+	"fmt"              // for output printing
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
+	"path/filepath"    // for path manipulation
 	"strings"
-	"bufio"
+	"bufio"            // for reading files line by line
 )
 
+// Global map to store known malware MD5 hashes
 var malwareHashes = map[string]bool{}
 
+// Load all .md5 hash files from a given directory
 func loadHashesFromDir(dir string) error {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -35,6 +37,7 @@ func loadHashesFromDir(dir string) error {
 	return nil
 }
 
+// Read a single .md5 file and add each valid hash to the global map
 func loadHashesFromFile(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -45,7 +48,7 @@ func loadHashesFromFile(filename string) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if len(line) == 32 {
+		if len(line) == 32 { // MD5 hashes are 32 hex characters
 			malwareHashes[line] = true
 		}
 	}
@@ -53,7 +56,7 @@ func loadHashesFromFile(filename string) error {
 	return scanner.Err()
 }
 
-
+// Compute the MD5 hash of a file and return it as a hex string
 func computeMD5(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -68,6 +71,7 @@ func computeMD5(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
+// Scan a single file, compare its hash to known malware hashes
 func scanFile(filePath string) {
 	md5hash, err := computeMD5(filePath)
 	if err != nil {
@@ -81,7 +85,7 @@ func scanFile(filePath string) {
 	}
 }
 
-
+// Extract all contents of a ZIP file to a temporary directory
 func extractZip(zipPath string) (string, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -127,6 +131,7 @@ func extractZip(zipPath string) (string, error) {
 	return tempDir, nil
 }
 
+// Recursively walk a directory, scan files, and extract+scan ZIPs
 func scanDirectory(path string) {
 	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -144,7 +149,7 @@ func scanDirectory(path string) {
 				fmt.Printf("[!] Error extracting %s: %v\n", filePath, err)
 				return nil
 			}
-			scanDirectory(unzippedDir)
+			scanDirectory(unzippedDir) // scan extracted files recursively
 			return nil
 		}
 
@@ -157,6 +162,7 @@ func scanDirectory(path string) {
 	}
 }
 
+// Entry point: parse CLI args, load hashes, then scan the directory
 func main() {
 	dirPtr := flag.String("scan", ".", "Directory to scan")
 	flag.Parse()
@@ -164,7 +170,7 @@ func main() {
 	fmt.Println("🛡️  Malware Scanner (MD5 + ZIP support)")
 	fmt.Printf("📂 Scanning: %s\n\n", *dirPtr)
 
-	// 🔥 Load all .md5 hash files before scanning
+	// Load .md5 files from hash directory
 	err := loadHashesFromDir("virus_md5_hashes")
 	if err != nil {
 		fmt.Printf("❌ Failed to load hash directory: %v\n", err)
@@ -173,9 +179,10 @@ func main() {
 
 	fmt.Printf("✅ Total hashes loaded: %d\n", len(malwareHashes))
 
+	// Begin scanning the selected directory
 	scanDirectory(*dirPtr)
 
-	
+	// Wait for Enter before exiting (useful when run by double-click)
 	fmt.Println("\nPress Enter to exit...")
 	fmt.Scanln()
 }
